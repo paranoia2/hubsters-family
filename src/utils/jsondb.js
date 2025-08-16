@@ -1,52 +1,18 @@
-import { JSONFilePreset } from 'lowdb/node'
+// src/utils/jsondb.js
+import { Low } from 'lowdb'
+import { JSONFile } from 'lowdb/node'
 
-// створюємо/читаємо базу (файл зберігатиметься як data.json)
-const db = await JSONFilePreset('data.json', {
-  warns: {},
-  giveaways: {},
-  history: []
-})
+// Створюємо адаптер для JSON
+const adapter = new JSONFile('db.json')
 
-// функція додавання числа (якщо потрібно для рулетки)
-export async function addNumber(num) {
-  db.data.history.push(num)
-  await db.write()
-}
+// Створюємо інстанс Low з початковими даними
+const db = new Low(adapter, { users: [] })
 
-// функція отримання останніх чисел
-export function getHistory(limit = 10) {
-  return db.data.history.slice(-limit)
-}
+// Завантажуємо дані з файлу (або створюємо новий)
+await db.read()
 
-// ⚠️ зберігання варнів
-export async function addWarn(userId, reason) {
-  if (!db.data.warns[userId]) db.data.warns[userId] = []
-  db.data.warns[userId].push({ reason, date: new Date().toISOString() })
-  await db.write()
-}
-
-export function getWarns(userId) {
-  return db.data.warns[userId] || []
-}
-
-export async function clearWarns(userId) {
-  delete db.data.warns[userId]
-  await db.write()
-}
-
-// 🎉 зберігання розіграшів
-export async function saveGiveaway(id, data) {
-  db.data.giveaways[id] = data
-  await db.write()
-}
-
-export function getGiveaway(id) {
-  return db.data.giveaways[id]
-}
-
-export async function removeGiveaway(id) {
-  delete db.data.giveaways[id]
-  await db.write()
-}
+// Якщо файл порожній → ініціалізуємо дефолтними даними
+db.data ||= { users: [] }
+await db.write()
 
 export default db
