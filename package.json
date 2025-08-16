@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "description": "Hubsters Family Discord bot (phase 1: base, moderation, welcome, giveaways, gradient roles)",
   "type": "module",
-  "main": "bot.js",
+  "main": "src/bot.js",
   "scripts": {
-    "start": "node bot.js",
+    "start": "node src/bot.js",
     "deploy": "node deploy-commands.js"
   },
   "engines": {
