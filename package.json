@@ -1,23 +1,21 @@
 {
   "name": "hubsters-family-bot",
-  "version": "1.0.0",
-  "description": "Discord bot for Hubsters Family server with music, reminders and auto-messages",
+  "version": "3.0.0",
+  "description": "Hubsters Family Discord bot (Phase 3: moderation + music + giveaways + warns + self-roles + modlog + gradient)",
   "type": "module",
   "main": "src/bot.js",
   "scripts": {
     "start": "node src/bot.js",
     "deploy": "node src/deploy-commands.js"
   },
-   "dependencies": {
-    "discord.js": "^14.21.0",
-    "node-cron": "^4.2.1",
-    "distube": "^5.0.7",
-    "@distube/yt-dlp": "^2.0.1",
-    "@distube/spotify": "^2.0.2",
-    "@distube/soundcloud": "^2.0.4",
-    "@discordjs/voice": "^0.18.0"
-  },
   "engines": {
     "node": ">=18"
+  },
+  "dependencies": {
+    "discord.js": "^14.15.3",
+    "dotenv": "^16.4.5",
+    "@discordjs/voice": "^0.16.1",
+    "play-dl": "^1.9.7",
+    "tiny-jsondb": "^2.2.1"
   }
 }
