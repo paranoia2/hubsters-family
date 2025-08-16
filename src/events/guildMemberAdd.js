@@ -1,17 +1,15 @@
 import { Events, EmbedBuilder } from 'discord.js';
-
 export default {
   name: Events.GuildMemberAdd,
-  once: false,
   async execute(member) {
-    const channelId = process.env.WELCOME_CHANNEL_ID;
-    if (!channelId) return;
-    const channel = member.guild.channels.cache.get(channelId);
-    if (!channel) return;
-    const embed = new EmbedBuilder()
+    const chId = process.env.WELCOME_CHANNEL_ID;
+    if (!chId) return;
+    const ch = member.guild.channels.cache.get(chId);
+    if (!ch) return;
+    const emb = new EmbedBuilder()
       .setTitle('👋 Ласкаво просимо!')
-      .setDescription(`Вітаємо, ${member}! Ти приєднався до **Hubsters Family**.`)
+      .setDescription(`Вітаємо, ${member}!`)
       .setTimestamp();
-    channel.send({ embeds: [embed] }).catch(() => {});
+    ch.send({ embeds: [emb] }).catch(()=>{});
   }
 };
