@@ -16,6 +16,6 @@
     "dotenv": "^16.4.5",
     "@discordjs/voice": "^0.16.1",
     "play-dl": "^1.9.7",
-    "tiny-jsondb": "^2.2.1"
+    "lowdb": "^6.1.1"
   }
 }
