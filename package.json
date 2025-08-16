@@ -1,0 +1,18 @@
+{
+  "name": "hubsters-family-bot",
+  "version": "1.0.0",
+  "description": "Hubsters Family Discord bot (phase 1: base, moderation, welcome, giveaways, gradient roles)",
+  "type": "module",
+  "main": "src/bot.js",
+  "scripts": {
+    "start": "node src/bot.js",
+    "deploy": "node src/deploy-commands.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "discord.js": "^14.15.3",
+    "dotenv": "^16.4.5"
+  }
+}
