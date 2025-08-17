@@ -1,52 +1,51 @@
-const { SlashCommandBuilder } = require('discord.js');
-const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus } = require('@discordjs/voice');
-const play = require('play-dl');
+import { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, getVoiceConnection } from "@discordjs/voice";
+import play from "play-dl";
 
-let player;
+const queues = new Map();
 
-module.exports = {
-    data: new SlashCommandBuilder()
-        .setName('play')
-        .setDescription('Включає музику з YouTube')
-        .addStringOption(option =>
-            option.setName('url')
-                .setDescription('Посилання на YouTube')
-                .setRequired(true)
-        ),
-    async execute(interaction) {
-        const url = interaction.options.getString('url');
-        const voiceChannel = interaction.member.voice.channel;
+export function getQueue(guildId) {
+    if (!queues.has(guildId)) {
+        queues.set(guildId, {
+            songs: [],
+            player: createAudioPlayer(),
+            connection: null
+        });
+    }
+    return queues.get(guildId);
+}
 
-        if (!voiceChannel) {
-            return interaction.reply('❌ Ти повинен бути у голосовому каналі!');
-        }
+export async function enqueue(guildId, song, channel) {
+    const queue = getQueue(guildId);
+    queue.songs.push(song);
 
-        await interaction.reply(`🔊 Відтворюю: ${url}`);
+    if (!queue.connection) {
+        queue.connection = joinVoiceChannel({
+            channelId: channel.id,
+            guildId: guildId,
+            adapterCreator: channel.guild.voiceAdapterCreator
+        });
 
-        try {
-            // Підключення до каналу
-            const connection = joinVoiceChannel({
-                channelId: voiceChannel.id,
-                guildId: interaction.guild.id,
-                adapterCreator: interaction.guild.voiceAdapterCreator,
-            });
+        queue.player.on(AudioPlayerStatus.Idle, () => {
+            queue.songs.shift();
+            if (queue.songs.length > 0) {
+                playSong(guildId);
+            }
+        });
 
-            // Отримуємо стрім із play-dl
-            const stream = await play.stream(url);
-            const resource = createAudioResource(stream.stream, { inputType: stream.type });
+        queue.connection.subscribe(queue.player);
+    }
 
-            if (!player) player = createAudioPlayer();
-            player.play(resource);
-            connection.subscribe(player);
+    if (queue.player.state.status === AudioPlayerStatus.Idle) {
+        playSong(guildId);
+    }
+}
 
-            // Події для контролю
-            player.on(AudioPlayerStatus.Idle, () => {
-                connection.destroy();
-            });
+async function playSong(guildId) {
+    const queue = getQueue(guildId);
+    if (!queue.songs.length) return;
 
-        } catch (err) {
-            console.error(err);
-            interaction.followUp('⚠️ Сталася помилка при спробі відтворити трек.');
-        }
-    },
-};
+    const song = queue.songs[0];
+    const stream = await play.stream(song.url);
+    const resource = createAudioResource(stream.stream, { inputType: stream.type });
+    queue.player.play(resource);
+}
