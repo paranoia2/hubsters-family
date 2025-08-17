@@ -1,56 +1,81 @@
-import 'dotenv/config';
-import { Client, Collection, GatewayIntentBits, Partials, Events } from 'discord.js';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import 'dotenv/config'
+import { Client, GatewayIntentBits, Partials, Collection, ActivityType, Events } from 'discord.js'
+import { fileURLToPath } from 'url'
+import { dirname, join } from 'path'
+import fs from 'fs'
+import chalk from 'chalk'
+import { ensureDataFiles, db } from './utils/jsondb.js'
+import { onGuildMemberAdd } from './events/welcome.js'
+import { setupModLog } from './utils/modlog.js'
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
 
+// Create client
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildVoiceStates,
-    GatewayIntentBits.GuildMessageReactions
+    GatewayIntentBits.MessageContent
   ],
-  partials: [Partials.Message, Partials.Channel, Partials.Reaction]
-});
+  partials: [Partials.Channel, Partials.GuildMember, Partials.Message, Partials.User]
+})
 
-client.commands = new Collection();
+client.commands = new Collection()
 
-// Load commands
-const commandsPath = path.join(__dirname, 'commands');
-const commandFiles = fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'));
-for (const file of commandFiles) {
-  const cmd = (await import(path.join(commandsPath, file))).default;
-  client.commands.set(cmd.data.name, cmd);
-}
-
-// Load events
-const eventsPath = path.join(__dirname, 'events');
-const eventFiles = fs.readdirSync(eventsPath).filter(f => f.endsWith('.js'));
-for (const file of eventFiles) {
-  const ev = (await import(path.join(eventsPath, file))).default;
-  if (ev.once) client.once(ev.name, (...args) => ev.execute(...args, client));
-  else client.on(ev.name, (...args) => ev.execute(...args, client));
-}
-
-// Dispatcher
-client.on(Events.InteractionCreate, async (interaction) => {
-  if (!interaction.isChatInputCommand()) return;
-  const command = client.commands.get(interaction.commandName);
-  if (!command) return;
-  try {
-    await command.execute(interaction, client);
-  } catch (e) {
-    console.error(e);
-    const content = '⚠️ Виникла помилка.';
-    if (interaction.deferred || interaction.replied) await interaction.followUp({ content, ephemeral: true }).catch(()=>{});
-    else await interaction.reply({ content, ephemeral: true }).catch(()=>{});
+// Load commands dynamically
+const commandsPath = join(__dirname, 'commands')
+const folders = fs.readdirSync(commandsPath)
+for (const folder of folders) {
+  const folderPath = join(commandsPath, folder)
+  const files = fs.readdirSync(folderPath).filter(f => f.endsWith('.js'))
+  for (const file of files) {
+    const filePath = join(folderPath, file)
+    const cmd = (await import('file://' + filePath)).default
+    if (cmd?.data?.name) {
+      client.commands.set(cmd.data.name, cmd)
+    } else {
+      console.warn('Skipping command without data.name:', filePath)
+    }
   }
-});
+}
 
-client.login(process.env.DISCORD_TOKEN);
+// Events
+client.once(Events.ClientReady, async (c) => {
+  console.log(chalk.green(`✅ Logged in as ${c.user.tag}`))
+  c.user.setActivity('Hubsters Family', { type: ActivityType.Playing })
+  await ensureDataFiles()
+  setupModLog(client)
+})
+
+client.on(Events.InteractionCreate, async (interaction) => {
+  if (!interaction.isChatInputCommand() && !interaction.isButton()) return
+  if (interaction.isButton()) {
+    // button handlers could live here (roles, giveaways) – left minimal
+    return
+  }
+  const command = client.commands.get(interaction.commandName)
+  if (!command) return
+  try {
+    await command.execute(interaction, client)
+  } catch (err) {
+    console.error(err)
+    if (interaction.deferred || interaction.replied) {
+      await interaction.followUp({ content: '❌ Сталася помилка при виконанні команди.', ephemeral: true })
+    } else {
+      await interaction.reply({ content: '❌ Сталася помилка при виконанні команди.', ephemeral: true })
+    }
+  }
+})
+
+// Welcome event
+client.on(Events.GuildMemberAdd, (member) => onGuildMemberAdd(member))
+
+// Login
+if (!process.env.DISCORD_TOKEN) {
+  console.error('Missing DISCORD_TOKEN in env')
+  process.exit(1)
+}
+client.login(process.env.DISCORD_TOKEN)
