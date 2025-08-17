@@ -1,4 +1,11 @@
-import { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, VoiceConnectionStatus, entersState } from '@discordjs/voice'
+import { 
+  joinVoiceChannel, 
+  createAudioPlayer, 
+  createAudioResource, 
+  AudioPlayerStatus, 
+  VoiceConnectionStatus, 
+  entersState 
+} from '@discordjs/voice'
 import play from 'play-dl'
 
 const queues = new Map() // guildId -> { connection, player, queue: [], now }
@@ -26,15 +33,32 @@ async function playNext(guildId) {
     ctx.player.stop()
     return
   }
-  const stream = await play.stream(next.url)
-  const resource = createAudioResource(stream.stream, { inputType: stream.type })
-  ctx.player.play(resource)
-  ctx.now = next
+
+  try {
+    const stream = await play.stream(next.url)
+    const resource = createAudioResource(stream.stream, { inputType: stream.type })
+    ctx.player.play(resource)
+    ctx.now = next
+  } catch (err) {
+    ctx.now = null
+    console.error('Помилка при відтворенні:', err)
+    await playNext(guildId) // пробуємо наступний трек
+  }
+}
+
+function isUrl(str) {
+  try {
+    new URL(str)
+    return true
+  } catch {
+    return false
+  }
 }
 
 export async function enqueue(interaction, query) {
   const voice = interaction.member.voice.channel
   if (!voice) throw new Error('Зайди у голосовий канал.')
+
   let ctx = queues.get(interaction.guildId)
   if (!ctx) {
     const connection = await connectToChannel(voice)
@@ -44,21 +68,32 @@ export async function enqueue(interaction, query) {
     ctx = { connection, player, queue: [], now: null }
     queues.set(interaction.guildId, ctx)
   }
-  // Resolve link or search
-  let info
-    try {
-    info = await play.search(query, { limit: 1 })
-    if (!info.length) throw new Error('Нічого не знайдено.')
-    const vid = info[0]
-    ctx.queue.push({ title: vid.title, url: vid.url })
+
+  try {
+    let track
+    if (isUrl(query)) {
+      // Якщо посилання
+      const info = await play.video_info(query)
+      const details = info.video_details
+      track = { title: details.title, url: details.url }
+    } else {
+      // Якщо пошуковий запит
+      const results = await play.search(query, { limit: 1 })
+      if (!results.length) throw new Error('Нічого не знайдено.')
+      const vid = results[0]
+      track = { title: vid.title, url: vid.url }
+    }
+
+    ctx.queue.push(track)
+
+    if (ctx.player.state.status === AudioPlayerStatus.Idle) {
+      await playNext(interaction.guildId)
+    }
+
+    return ctx
   } catch (e) {
-    // fallback: push raw query as url
-    ctx.queue.push({ title: query, url: query })
+    throw new Error('❌ Інвалідне посилання або пошуковий запит.')
   }
-  if (ctx.player.state.status === AudioPlayerStatus.Idle) {
-    await playNext(interaction.guildId)
-  }
-  return ctx
 }
 
 export function skip(guildId) {
