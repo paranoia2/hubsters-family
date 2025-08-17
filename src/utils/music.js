@@ -1,124 +1,84 @@
-const Discord = require('discord.js');
-const {
-	prefix,
-	token,
-} = require('./config.json');
-const ytdl = require('ytdl-core');
+import { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, VoiceConnectionStatus, entersState } from '@discordjs/voice'
+import play from 'play-dl'
 
-const client = new Discord.Client();
+const queues = new Map() // guildId -> { connection, player, queue: [], now }
 
-const queue = new Map();
-
-client.once('ready', () => {
-	console.log('Ready!');
-});
-
-client.once('reconnecting', () => {
-	console.log('Reconnecting!');
-});
-
-client.once('disconnect', () => {
-	console.log('Disconnect!');
-});
-
-client.on('message', async message => {
-	if (message.author.bot) return;
-	if (!message.content.startsWith(prefix)) return;
-
-	const serverQueue = queue.get(message.guild.id);
-
-	if (message.content.startsWith(`${prefix}play`)) {
-		execute(message, serverQueue);
-		return;
-	} else if (message.content.startsWith(`${prefix}skip`)) {
-		skip(message, serverQueue);
-		return;
-	} else if (message.content.startsWith(`${prefix}stop`)) {
-		stop(message, serverQueue);
-		return;
-	} else {
-		message.channel.send('You need to enter a valid command!')
-	}
-});
-
-async function execute(message, serverQueue) {
-	const args = message.content.split(' ');
-
-	const voiceChannel = message.member.voiceChannel;
-	if (!voiceChannel) return message.channel.send('You need to be in a voice channel to play music!');
-	const permissions = voiceChannel.permissionsFor(message.client.user);
-	if (!permissions.has('CONNECT') || !permissions.has('SPEAK')) {
-		return message.channel.send('I need the permissions to join and speak in your voice channel!');
-	}
-
-	const songInfo = await ytdl.getInfo(args[1]);
-	const song = {
-		title: songInfo.title,
-		url: songInfo.video_url,
-	};
-
-	if (!serverQueue) {
-		const queueContruct = {
-			textChannel: message.channel,
-			voiceChannel: voiceChannel,
-			connection: null,
-			songs: [],
-			volume: 5,
-			playing: true,
-		};
-
-		queue.set(message.guild.id, queueContruct);
-
-		queueContruct.songs.push(song);
-
-		try {
-			var connection = await voiceChannel.join();
-			queueContruct.connection = connection;
-			play(message.guild, queueContruct.songs[0]);
-		} catch (err) {
-			console.log(err);
-			queue.delete(message.guild.id);
-			return message.channel.send(err);
-		}
-	} else {
-		serverQueue.songs.push(song);
-		console.log(serverQueue.songs);
-		return message.channel.send(`${song.title} has been added to the queue!`);
-	}
-
+async function connectToChannel(voiceChannel) {
+  const connection = joinVoiceChannel({
+    channelId: voiceChannel.id,
+    guildId: voiceChannel.guild.id,
+    adapterCreator: voiceChannel.guild.voiceAdapterCreator
+  })
+  try {
+    await entersState(connection, VoiceConnectionStatus.Ready, 30_000)
+    return connection
+  } catch (e) {
+    connection.destroy()
+    throw e
+  }
 }
 
-function skip(message, serverQueue) {
-	if (!message.member.voiceChannel) return message.channel.send('You have to be in a voice channel to stop the music!');
-	if (!serverQueue) return message.channel.send('There is no song that I could skip!');
-	serverQueue.connection.dispatcher.end();
+async function playNext(guildId) {
+  const ctx = queues.get(guildId)
+  if (!ctx) return
+  const next = ctx.queue.shift()
+  if (!next) {
+    ctx.player.stop()
+    return
+  }
+  const stream = await play.stream(next.url)
+  const resource = createAudioResource(stream.stream, { inputType: stream.type })
+  ctx.player.play(resource)
+  ctx.now = next
 }
 
-function stop(message, serverQueue) {
-	if (!message.member.voiceChannel) return message.channel.send('You have to be in a voice channel to stop the music!');
-	serverQueue.songs = [];
-	serverQueue.connection.dispatcher.end();
+export async function enqueue(interaction, query) {
+  const voice = interaction.member.voice.channel
+  if (!voice) throw new Error('Зайди у голосовий канал.')
+  let ctx = queues.get(interaction.guildId)
+  if (!ctx) {
+    const connection = await connectToChannel(voice)
+    const player = createAudioPlayer()
+    connection.subscribe(player)
+    player.on(AudioPlayerStatus.Idle, () => playNext(interaction.guildId))
+    ctx = { connection, player, queue: [], now: null }
+    queues.set(interaction.guildId, ctx)
+  }
+  // Resolve link or search
+  let info
+    try {
+    info = await play.search(query, { limit: 1 })
+    if (!info.length) throw new Error('Нічого не знайдено.')
+    const vid = info[0]
+    ctx.queue.push({ title: vid.title, url: vid.url })
+  } catch (e) {
+    // fallback: push raw query as url
+    ctx.queue.push({ title: query, url: query })
+  }
+  if (ctx.player.state.status === AudioPlayerStatus.Idle) {
+    await playNext(interaction.guildId)
+  }
+  return ctx
 }
 
-function play(guild, song) {
-	const serverQueue = queue.get(guild.id);
-
-	if (!song) {
-		serverQueue.voiceChannel.leave();
-		queue.delete(guild.id);
-		return;
-	}
-
-	const dispatcher = serverQueue.connection.playStream(ytdl(song.url))
-		.on('end', () => {
-			console.log('Music ended!');
-			serverQueue.songs.shift();
-			play(guild, serverQueue.songs[0]);
-		})
-		.on('error', error => {
-			console.error(error);
-		});
-	dispatcher.setVolumeLogarithmic(serverQueue.volume / 5);
+export function skip(guildId) {
+  const ctx = queues.get(guildId)
+  if (!ctx) return false
+  return ctx.player.stop()
 }
 
-client.login(token);
+export function stop(guildId) {
+  const ctx = queues.get(guildId)
+  if (!ctx) return false
+  ctx.queue = []
+  ctx.player.stop()
+  ctx.connection.destroy()
+  queues.delete(guildId)
+  return true
+}
+
+export function getQueue(guildId) {
+  const ctx = queues.get(guildId)
+  if (!ctx) return { now: null, queue: [] }
+  return { now: ctx.now, queue: ctx.queue }
+}
