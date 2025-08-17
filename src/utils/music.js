@@ -1,51 +1,84 @@
-import { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, getVoiceConnection } from "@discordjs/voice";
-import play from "play-dl";
+import { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, VoiceConnectionStatus, entersState } from '@discordjs/voice'
+import play from 'play-dl'
 
-const queues = new Map();
+const queues = new Map() // guildId -> { connection, player, queue: [], now }
+
+async function connectToChannel(voiceChannel) {
+  const connection = joinVoiceChannel({
+    channelId: voiceChannel.id,
+    guildId: voiceChannel.guild.id,
+    adapterCreator: voiceChannel.guild.voiceAdapterCreator
+  })
+  try {
+    await entersState(connection, VoiceConnectionStatus.Ready, 30_000)
+    return connection
+  } catch (e) {
+    connection.destroy()
+    throw e
+  }
+}
+
+async function playNext(guildId) {
+  const ctx = queues.get(guildId)
+  if (!ctx) return
+  const next = ctx.queue.shift()
+  if (!next) {
+    ctx.player.stop()
+    return
+  }
+  const stream = await play.stream(next.url)
+  const resource = createAudioResource(stream.stream, { inputType: stream.type })
+  ctx.player.play(resource)
+  ctx.now = next
+}
+
+export async function enqueue(interaction, query) {
+  const voice = interaction.member.voice.channel
+  if (!voice) throw new Error('Зайди у голосовий канал.')
+  let ctx = queues.get(interaction.guildId)
+  if (!ctx) {
+    const connection = await connectToChannel(voice)
+    const player = createAudioPlayer()
+    connection.subscribe(player)
+    player.on(AudioPlayerStatus.Idle, () => playNext(interaction.guildId))
+    ctx = { connection, player, queue: [], now: null }
+    queues.set(interaction.guildId, ctx)
+  }
+  // Resolve link or search
+  let info
+    try {
+    info = await play.search(query, { limit: 1 })
+    if (!info.length) throw new Error('Нічого не знайдено.')
+    const vid = info[0]
+    ctx.queue.push({ title: vid.title, url: vid.url })
+  } catch (e) {
+    // fallback: push raw query as url
+    ctx.queue.push({ title: query, url: query })
+  }
+  if (ctx.player.state.status === AudioPlayerStatus.Idle) {
+    await playNext(interaction.guildId)
+  }
+  return ctx
+}
+
+export function skip(guildId) {
+  const ctx = queues.get(guildId)
+  if (!ctx) return false
+  return ctx.player.stop()
+}
+
+export function stop(guildId) {
+  const ctx = queues.get(guildId)
+  if (!ctx) return false
+  ctx.queue = []
+  ctx.player.stop()
+  ctx.connection.destroy()
+  queues.delete(guildId)
+  return true
+}
 
 export function getQueue(guildId) {
-    if (!queues.has(guildId)) {
-        queues.set(guildId, {
-            songs: [],
-            player: createAudioPlayer(),
-            connection: null
-        });
-    }
-    return queues.get(guildId);
-}
-
-export async function enqueue(guildId, song, channel) {
-    const queue = getQueue(guildId);
-    queue.songs.push(song);
-
-    if (!queue.connection) {
-        queue.connection = joinVoiceChannel({
-            channelId: channel.id,
-            guildId: guildId,
-            adapterCreator: channel.guild.voiceAdapterCreator
-        });
-
-        queue.player.on(AudioPlayerStatus.Idle, () => {
-            queue.songs.shift();
-            if (queue.songs.length > 0) {
-                playSong(guildId);
-            }
-        });
-
-        queue.connection.subscribe(queue.player);
-    }
-
-    if (queue.player.state.status === AudioPlayerStatus.Idle) {
-        playSong(guildId);
-    }
-}
-
-async function playSong(guildId) {
-    const queue = getQueue(guildId);
-    if (!queue.songs.length) return;
-
-    const song = queue.songs[0];
-    const stream = await play.stream(song.url);
-    const resource = createAudioResource(stream.stream, { inputType: stream.type });
-    queue.player.play(resource);
+  const ctx = queues.get(guildId)
+  if (!ctx) return { now: null, queue: [] }
+  return { now: ctx.now, queue: ctx.queue }
 }
