@@ -35,14 +35,20 @@ async function playNext(guildId) {
   }
 
   try {
+    // Якщо токен протух — оновимо
+    if (play.is_expired()) {
+      await play.refreshToken()
+    }
+
     const stream = await play.stream(next.url)
     const resource = createAudioResource(stream.stream, { inputType: stream.type })
     ctx.player.play(resource)
     ctx.now = next
   } catch (err) {
     ctx.now = null
-    console.error('Помилка при відтворенні:', err)
-    await playNext(guildId) // пробуємо наступний трек
+    console.error('Помилка при відтворенні:', err, 'URL:', next.url)
+    // пробуємо наступний трек замість того, щоб все ламалось
+    await playNext(guildId)
   }
 }
 
@@ -75,7 +81,7 @@ export async function enqueue(interaction, query) {
       // Якщо посилання
       const info = await play.video_info(query)
       const details = info.video_details
-      track = { title: details.title, url: details.url }
+      track = { title: details.title, url: details.video_url } // <-- FIX тут
     } else {
       // Якщо пошуковий запит
       const results = await play.search(query, { limit: 1 })
@@ -92,6 +98,7 @@ export async function enqueue(interaction, query) {
 
     return ctx
   } catch (e) {
+    console.error('enqueue error:', e)
     throw new Error('❌ Інвалідне посилання або пошуковий запит.')
   }
 }
