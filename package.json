@@ -20,7 +20,6 @@
   },
   "devDependencies": {
     "ts-node": "^10.9.1",
-    "ts-node-esm": "^1.2.0",
     "typescript": "^5.5.0",
     "@types/node": "^20.5.1",
     "@types/ws": "^8.5.4"
