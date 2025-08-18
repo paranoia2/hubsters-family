@@ -8,10 +8,9 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true,
-    "experimentalDecorators": false,
-    "emitDecoratorMetadata": false
+    "resolveJsonModule": true
   },
-  "include": ["src"]
+  "include": [
+    "src"
+  ]
 }
