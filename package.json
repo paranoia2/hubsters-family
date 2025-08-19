@@ -1,5 +1,5 @@
 {
-  "name": "discord-bot-ts-youtube-only",
+  "name": "discord-bot-ts-no-music",
   "version": "1.0.0",
   "type": "module",
   "main": "dist/index.js",
@@ -11,11 +11,11 @@
   },
   "dependencies": {
     "discord.js": "^14.12.0",
-    "@discordjs/voice": "^0.14.0",
-    "play-dl": "^1.9.7",
     "better-sqlite3": "^8.0.0",
     "dotenv": "^16.0.0",
-    "ffmpeg-static": "^5.1.0"
+    "rss-parser": "^3.12.0",
+    "node-fetch": "^3.3.2",
+    "axios": "^1.4.0"
   },
   "devDependencies": {
     "ts-node": "^10.9.1",

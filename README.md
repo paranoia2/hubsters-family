@@ -1,4 +1,4 @@
-# Discord Bot (TypeScript) — YouTube-only Music + Moderation + Giveaways + Games + Jokes + Birthdays
+# Discord Bot (TypeScript) — No Music + Reaction Roles + Memes + Jokes + Auto-News + Moderation + Giveaways + Games + Birthdays
 
 Quick start:
 1. Copy `.env.example` to `.env` and fill `DISCORD_TOKEN` and `CLIENT_ID` (and `GUILD_ID` for quick register).
@@ -6,7 +6,7 @@ Quick start:
    ```bash
    npm install
    ```
-3. Register slash commands (optional for testing in one guild):
+3. Register slash commands (recommended to test in one guild):
    ```bash
    npm run register
    ```
@@ -21,6 +21,8 @@ or build and run:
    ```
 
 Notes:
-- Music supports **YouTube only** using `play-dl` + `@discordjs/voice`.
-- `ffmpeg-static` included; on some hosts you may need system ffmpeg.
+- Music has been removed as requested.
+- Reaction roles: `/reactrole-setup` creates a message with reactions mapped to role IDs.
+- Memes: `/meme` fetches a meme from a public API (meme-api).
+- Auto-news: add RSS with `/news-add <feed_url> <channel>` to post updates automatically.
 - Database: SQLite via `better-sqlite3` (file `database.sqlite` will be created).
